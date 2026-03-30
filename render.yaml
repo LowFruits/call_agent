@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: call-agent
+    runtime: python
+    plan: free
+    buildCommand: pip install .
+    startCommand: uvicorn src.call_agent.api.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: SCHEDULING_API_URL
+        value: https://scheduling-simulation-api.onrender.com

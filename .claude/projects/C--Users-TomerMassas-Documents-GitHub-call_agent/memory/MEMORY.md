@@ -1,0 +1,5 @@
+- [User Profile](user_profile.md) — Tomer's role and collaboration preferences
+- [Working Guidelines](feedback_working_guidelines.md) — Core collaboration rules
+- [Project Context](project_context.md) — Architecture, purpose, key decisions
+- [Project Roadmap](project_roadmap.md) — Active todos and priorities
+- [Project Progress](project_progress.md) — Session-by-session work log
