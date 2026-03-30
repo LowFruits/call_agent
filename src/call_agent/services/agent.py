@@ -23,7 +23,7 @@ class AgentService:
         openai_client: openai.AsyncOpenAI,
         scheduling_api: SchedulingAPIProtocol,
         conversation_repo: ConversationRepositoryProtocol,
-        model: str = "gpt-4o",
+        model: str = "gpt-4o-mini",
     ) -> None:
         self._openai = openai_client
         self._api = scheduling_api

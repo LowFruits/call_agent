@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep \"\"\"url\"\"\" \"/c/Users/TomerMassas/Documents/GitHub/meta/api-contracts/scheduling-api.json\")",
+      "Bash(pip install:*)",
+      "Bash(pytest tests/unit/test_scheduling_api.py -v)",
+      "Bash(pytest tests/unit/test_tools.py tests/unit/test_agent.py -v)",
+      "Bash(pytest -v)",
+      "Bash(ruff check:*)",
+      "Bash(mypy src/)",
+      "Bash(curl:*)"
+    ]
+  }
+}
