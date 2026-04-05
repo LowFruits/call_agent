@@ -15,6 +15,7 @@ from call_agent.domain.models import (
     Clinic,
     Doctor,
     Patient,
+    Route,
     TimeSlot,
 )
 from call_agent.services.tools import TOOL_DEFINITIONS, TOOL_REGISTRY
@@ -156,70 +157,79 @@ def api() -> FakeSchedulingAPI:
     return FakeSchedulingAPI()
 
 
+@pytest.fixture
+def route() -> Route:
+    return Route(
+        phone_number="whatsapp:+14155238886",
+        clinic_id=CLINIC_ID,
+        doctor_id=None,
+    )
+
+
 @pytest.mark.asyncio
-async def test_get_clinic_info(api: FakeSchedulingAPI) -> None:
+async def test_get_clinic_info(api: FakeSchedulingAPI, route: Route) -> None:
     result = json.loads(
-        await TOOL_REGISTRY["get_clinic_info"](api, {"clinic_id": str(CLINIC_ID)})
+        await TOOL_REGISTRY["get_clinic_info"](api, {}, route)
     )
     assert result["name"] == "Test Clinic"
 
 
 @pytest.mark.asyncio
-async def test_list_doctors(api: FakeSchedulingAPI) -> None:
+async def test_list_doctors(api: FakeSchedulingAPI, route: Route) -> None:
     result = json.loads(
-        await TOOL_REGISTRY["list_doctors"](api, {"clinic_id": str(CLINIC_ID)})
+        await TOOL_REGISTRY["list_doctors"](api, {}, route)
     )
     assert len(result) == 1
     assert result[0]["first_name"] == "Dan"
 
 
 @pytest.mark.asyncio
-async def test_find_patient_found(api: FakeSchedulingAPI) -> None:
+async def test_find_patient_found(api: FakeSchedulingAPI, route: Route) -> None:
     result = json.loads(
-        await TOOL_REGISTRY["find_patient"](api, {"phone": "052-9876543"})
+        await TOOL_REGISTRY["find_patient"](api, {"phone": "052-9876543"}, route)
     )
     assert result["first_name"] == "Yael"
 
 
 @pytest.mark.asyncio
-async def test_find_patient_not_found(api: FakeSchedulingAPI) -> None:
+async def test_find_patient_not_found(api: FakeSchedulingAPI, route: Route) -> None:
     result = json.loads(
-        await TOOL_REGISTRY["find_patient"](api, {"phone": "000-0000000"})
+        await TOOL_REGISTRY["find_patient"](api, {"phone": "000-0000000"}, route)
     )
     assert result["found"] is False
 
 
 @pytest.mark.asyncio
-async def test_get_available_slots(api: FakeSchedulingAPI) -> None:
+async def test_get_available_slots(api: FakeSchedulingAPI, route: Route) -> None:
     result = json.loads(
         await TOOL_REGISTRY["get_available_slots"](api, {
             "doctor_id": str(DOCTOR_ID),
             "date": "2026-04-01",
             "appointment_type_id": str(APPT_TYPE_ID),
-        })
+        }, route)
     )
     assert len(result) == 1
 
 
 @pytest.mark.asyncio
-async def test_book_appointment(api: FakeSchedulingAPI) -> None:
+async def test_book_appointment(api: FakeSchedulingAPI, route: Route) -> None:
     result = json.loads(
         await TOOL_REGISTRY["book_appointment"](api, {
             "doctor_id": str(DOCTOR_ID),
             "patient_id": str(PATIENT_ID),
             "appointment_type_id": str(APPT_TYPE_ID),
             "start_time": "2026-04-01T10:00:00",
-        })
+        }, route)
     )
     assert result["status"] == "scheduled"
 
 
 @pytest.mark.asyncio
-async def test_cancel_appointment(api: FakeSchedulingAPI) -> None:
+async def test_cancel_appointment(api: FakeSchedulingAPI, route: Route) -> None:
     result = json.loads(
         await TOOL_REGISTRY["cancel_appointment"](api, {
             "appointment_id": str(APPT_ID),
             "reason": "changed mind",
-        })
+        }, route)
     )
     assert result["status"] == "cancelled"

@@ -70,7 +70,7 @@ class AgentService:
 
             # Execute each tool call
             for tool_call in choice.tool_calls:
-                result = await self._execute_tool(tool_call)
+                result = await self._execute_tool(tool_call, route)
                 messages.append(
                     Message(
                         role=MessageRole.TOOL,
@@ -121,7 +121,7 @@ class AgentService:
             result.append(entry)
         return result
 
-    async def _execute_tool(self, tool_call: Any) -> str:
+    async def _execute_tool(self, tool_call: Any, route: Route) -> str:
         fn_name = tool_call.function.name
         executor = TOOL_REGISTRY.get(fn_name)
         if executor is None:
@@ -129,7 +129,7 @@ class AgentService:
 
         try:
             args = json.loads(tool_call.function.arguments)
-            result: str = await executor(self._api, args)
+            result: str = await executor(self._api, args, route)
             return result
         except Exception as e:
             logger.exception("Tool %s failed", fn_name)

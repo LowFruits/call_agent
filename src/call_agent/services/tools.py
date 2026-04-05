@@ -5,6 +5,7 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
+from call_agent.domain.models import Route
 from call_agent.repositories import SchedulingAPIProtocol
 
 # ---------------------------------------------------------------------------
@@ -16,13 +17,10 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_clinic_info",
-            "description": "Get information about a clinic (name, address, phone, timezone).",
+            "description": "Get information about the clinic (name, address, phone, timezone).",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "clinic_id": {"type": "string", "description": "The clinic UUID"},
-                },
-                "required": ["clinic_id"],
+                "properties": {},
             },
         },
     },
@@ -30,13 +28,10 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "list_doctors",
-            "description": "List all active doctors at a clinic with their names and specialties.",
+            "description": "List all active doctors at the clinic.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "clinic_id": {"type": "string", "description": "The clinic UUID"},
-                },
-                "required": ["clinic_id"],
+                "properties": {},
             },
         },
     },
@@ -112,15 +107,12 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "function": {
             "name": "list_appointment_types",
             "description": (
-                "List available appointment types for a clinic "
+                "List available appointment types for the clinic "
                 "(e.g. checkup, consultation)."
             ),
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "clinic_id": {"type": "string", "description": "The clinic UUID"},
-                },
-                "required": ["clinic_id"],
+                "properties": {},
             },
         },
     },
@@ -221,35 +213,35 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
 # ---------------------------------------------------------------------------
 
 async def _execute_get_clinic_info(
-    api: SchedulingAPIProtocol, args: dict[str, Any]
+    api: SchedulingAPIProtocol, args: dict[str, Any], route: Route
 ) -> str:
-    clinic = await api.get_clinic(UUID(args["clinic_id"]))
+    clinic = await api.get_clinic(route.clinic_id)
     return clinic.model_dump_json()
 
 
 async def _execute_list_doctors(
-    api: SchedulingAPIProtocol, args: dict[str, Any]
+    api: SchedulingAPIProtocol, args: dict[str, Any], route: Route
 ) -> str:
-    doctors = await api.list_doctors(UUID(args["clinic_id"]))
+    doctors = await api.list_doctors(route.clinic_id)
     return json.dumps([d.model_dump(mode="json") for d in doctors])
 
 
 async def _execute_get_doctor_info(
-    api: SchedulingAPIProtocol, args: dict[str, Any]
+    api: SchedulingAPIProtocol, args: dict[str, Any], route: Route
 ) -> str:
     doctor = await api.get_doctor(UUID(args["doctor_id"]))
     return doctor.model_dump_json()
 
 
 async def _execute_get_doctor_operational_info(
-    api: SchedulingAPIProtocol, args: dict[str, Any]
+    api: SchedulingAPIProtocol, args: dict[str, Any], route: Route
 ) -> str:
     info = await api.get_doctor_operational_info(UUID(args["doctor_id"]))
     return json.dumps(info)
 
 
 async def _execute_find_patient(
-    api: SchedulingAPIProtocol, args: dict[str, Any]
+    api: SchedulingAPIProtocol, args: dict[str, Any], route: Route
 ) -> str:
     patient = await api.find_patient_by_phone(args["phone"])
     if patient is None:
@@ -258,7 +250,7 @@ async def _execute_find_patient(
 
 
 async def _execute_create_patient(
-    api: SchedulingAPIProtocol, args: dict[str, Any]
+    api: SchedulingAPIProtocol, args: dict[str, Any], route: Route
 ) -> str:
     patient = await api.create_patient(
         first_name=args["first_name"],
@@ -269,14 +261,14 @@ async def _execute_create_patient(
 
 
 async def _execute_list_appointment_types(
-    api: SchedulingAPIProtocol, args: dict[str, Any]
+    api: SchedulingAPIProtocol, args: dict[str, Any], route: Route
 ) -> str:
-    types = await api.list_appointment_types(UUID(args["clinic_id"]))
+    types = await api.list_appointment_types(route.clinic_id)
     return json.dumps([t.model_dump(mode="json") for t in types])
 
 
 async def _execute_get_available_slots(
-    api: SchedulingAPIProtocol, args: dict[str, Any]
+    api: SchedulingAPIProtocol, args: dict[str, Any], route: Route
 ) -> str:
     slots = await api.get_available_slots(
         doctor_id=UUID(args["doctor_id"]),
@@ -287,7 +279,7 @@ async def _execute_get_available_slots(
 
 
 async def _execute_book_appointment(
-    api: SchedulingAPIProtocol, args: dict[str, Any]
+    api: SchedulingAPIProtocol, args: dict[str, Any], route: Route
 ) -> str:
     from call_agent.domain.models import BookRequest
 
@@ -302,7 +294,7 @@ async def _execute_book_appointment(
 
 
 async def _execute_cancel_appointment(
-    api: SchedulingAPIProtocol, args: dict[str, Any]
+    api: SchedulingAPIProtocol, args: dict[str, Any], route: Route
 ) -> str:
     appt = await api.cancel_appointment(
         appointment_id=UUID(args["appointment_id"]),
@@ -312,7 +304,7 @@ async def _execute_cancel_appointment(
 
 
 async def _execute_get_patient_appointments(
-    api: SchedulingAPIProtocol, args: dict[str, Any]
+    api: SchedulingAPIProtocol, args: dict[str, Any], route: Route
 ) -> str:
     appts = await api.get_patient_appointments(UUID(args["patient_id"]))
     return json.dumps([a.model_dump(mode="json") for a in appts])
