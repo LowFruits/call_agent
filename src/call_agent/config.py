@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
-    redis_url: str = "redis://localhost:6379"
+    redis_url: str = ""
     scheduling_api_url: str = "https://scheduling-simulation-api.onrender.com"
 
     # Single-route config for Phase 1

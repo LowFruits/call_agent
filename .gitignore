@@ -30,6 +30,9 @@ env/
 htmlcov/
 .coverage
 
+# Local dev data
+data/
+
 # OS
 .DS_Store
 Thumbs.db

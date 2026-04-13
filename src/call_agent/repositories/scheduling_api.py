@@ -31,11 +31,14 @@ class SchedulingAPIClient:
         return Clinic.model_validate(resp.json())
 
     async def list_doctors(
-        self, clinic_id: UUID, active_only: bool = True
+        self, clinic_id: UUID | None = None, active_only: bool = True
     ) -> list[Doctor]:
+        params: dict[str, str | bool] = {"active_only": active_only}
+        if clinic_id is not None:
+            params["clinic_id"] = str(clinic_id)
         resp = await self._client.get(
             self._url("/doctors/"),
-            params={"clinic_id": str(clinic_id), "active_only": active_only},
+            params=params,
         )
         resp.raise_for_status()
         return [Doctor.model_validate(d) for d in resp.json()]
@@ -74,11 +77,14 @@ class SchedulingAPIClient:
         return Patient.model_validate(resp.json())
 
     async def list_appointment_types(
-        self, clinic_id: UUID, active_only: bool = True
+        self, clinic_id: UUID | None = None, active_only: bool = True
     ) -> list[AppointmentType]:
+        params: dict[str, str | bool] = {"active_only": active_only}
+        if clinic_id is not None:
+            params["clinic_id"] = str(clinic_id)
         resp = await self._client.get(
             self._url("/appointment-types/"),
-            params={"clinic_id": str(clinic_id), "active_only": active_only},
+            params=params,
         )
         resp.raise_for_status()
         return [AppointmentType.model_validate(at) for at in resp.json()]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 import httpx
@@ -10,6 +10,7 @@ import redis.asyncio as aioredis
 from call_agent.config import Settings
 from call_agent.domain.models import Route
 from call_agent.repositories.conversation import RedisConversationRepository
+from call_agent.repositories.file_conversation import FileConversationRepository
 from call_agent.repositories.scheduling_api import SchedulingAPIClient
 from call_agent.services.agent import AgentService
 from call_agent.services.routing import RoutingService
@@ -19,8 +20,9 @@ from call_agent.services.routing import RoutingService
 class Container:
     agent_service: AgentService
     routing_service: RoutingService
+    scheduling_api: SchedulingAPIClient
     httpx_client: httpx.AsyncClient
-    redis_client: aioredis.Redis  # type: ignore[type-arg]
+    redis_client: aioredis.Redis | None = field(default=None)  # type: ignore[type-arg]
 
 
 async def bootstrap(settings: Settings | None = None) -> Container:
@@ -28,15 +30,20 @@ async def bootstrap(settings: Settings | None = None) -> Container:
         settings = Settings()
 
     httpx_client = httpx.AsyncClient(timeout=30.0)
-    redis_client: aioredis.Redis[bytes] = aioredis.from_url(
-        settings.redis_url
-    )
     openai_client = openai.AsyncOpenAI(api_key=settings.openai_api_key)
 
     scheduling_api = SchedulingAPIClient(
         base_url=settings.scheduling_api_url, client=httpx_client
     )
-    conversation_repo = RedisConversationRepository(redis=redis_client)
+
+    # Conversation store: Redis if configured, otherwise file-based
+    redis_client: aioredis.Redis[bytes] | None = None
+    if settings.redis_url:
+        redis_client = aioredis.from_url(settings.redis_url)
+        conversation_repo = RedisConversationRepository(redis=redis_client)
+    else:
+        conversation_repo = FileConversationRepository()  # type: ignore[assignment]
+
     agent_service = AgentService(
         openai_client=openai_client,
         scheduling_api=scheduling_api,
@@ -56,6 +63,7 @@ async def bootstrap(settings: Settings | None = None) -> Container:
     return Container(
         agent_service=agent_service,
         routing_service=routing_service,
+        scheduling_api=scheduling_api,
         httpx_client=httpx_client,
         redis_client=redis_client,
     )
@@ -63,4 +71,5 @@ async def bootstrap(settings: Settings | None = None) -> Container:
 
 async def shutdown(container: Container) -> None:
     await container.httpx_client.aclose()
-    await container.redis_client.close()
+    if container.redis_client:
+        await container.redis_client.close()

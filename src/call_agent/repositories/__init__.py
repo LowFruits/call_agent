@@ -20,7 +20,7 @@ class SchedulingAPIProtocol(Protocol):
     async def get_clinic(self, clinic_id: UUID) -> Clinic: ...
 
     async def list_doctors(
-        self, clinic_id: UUID, active_only: bool = True
+        self, clinic_id: UUID | None = None, active_only: bool = True
     ) -> list[Doctor]: ...
 
     async def get_doctor(self, doctor_id: UUID) -> Doctor: ...
@@ -36,7 +36,7 @@ class SchedulingAPIProtocol(Protocol):
     ) -> Patient: ...
 
     async def list_appointment_types(
-        self, clinic_id: UUID, active_only: bool = True
+        self, clinic_id: UUID | None = None, active_only: bool = True
     ) -> list[AppointmentType]: ...
 
     async def get_available_slots(
