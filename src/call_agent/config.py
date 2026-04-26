@@ -16,3 +16,6 @@ class Settings(BaseSettings):
     route_phone: str = ""
     route_clinic_id: str = ""
     route_doctor_id: str = ""
+
+    # Phase 2: deterministic chat protocol — set false to fall back to LLM agent
+    use_protocol: bool = True

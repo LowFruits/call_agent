@@ -100,7 +100,7 @@ class TestSchedulingModels:
 
     def test_appointment_type(self) -> None:
         at = AppointmentType(
-            id=uuid4(), clinic_id=uuid4(), name="Checkup", duration_minutes=30
+            id=uuid4(), doctor_id=uuid4(), name="Checkup", duration_minutes=30
         )
         assert at.is_active is True
 

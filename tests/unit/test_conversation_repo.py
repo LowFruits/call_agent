@@ -5,6 +5,7 @@ import pytest
 
 from call_agent.domain.enums import MessageRole
 from call_agent.domain.models import Message
+from call_agent.domain.protocol import Branch, ProtocolContext, ProtocolState, VisitType
 from call_agent.repositories.conversation import RedisConversationRepository
 
 
@@ -93,3 +94,57 @@ async def test_separate_conversations(repo: RedisConversationRepository) -> None
     b = await repo.get_messages(PATIENT, other_route)
     assert a[0].content == "A"
     assert b[0].content == "B"
+
+
+# ---------------------------------------------------------------------------
+# Protocol state + context persistence
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_default_protocol_state(repo: RedisConversationRepository) -> None:
+    state = await repo.get_protocol_state(PATIENT, ROUTE)
+    assert state == ProtocolState.ASK_INTENT
+
+
+@pytest.mark.asyncio
+async def test_default_protocol_context(repo: RedisConversationRepository) -> None:
+    ctx = await repo.get_protocol_context(PATIENT, ROUTE)
+    assert ctx == ProtocolContext()
+
+
+@pytest.mark.asyncio
+async def test_set_and_get_protocol_state(repo: RedisConversationRepository) -> None:
+    await repo.set_protocol_state(PATIENT, ROUTE, ProtocolState.ASK_KUPAT_CHOLIM)
+    state = await repo.get_protocol_state(PATIENT, ROUTE)
+    assert state == ProtocolState.ASK_KUPAT_CHOLIM
+
+
+@pytest.mark.asyncio
+async def test_set_and_get_protocol_context(repo: RedisConversationRepository) -> None:
+    ctx = ProtocolContext(
+        branch=Branch.NEW,
+        first_visit=True,
+        kupat_cholim="Clalit",
+        visit_type=VisitType.IN_PERSON,
+    )
+    await repo.set_protocol_context(PATIENT, ROUTE, ctx)
+    loaded = await repo.get_protocol_context(PATIENT, ROUTE)
+    assert loaded.branch == Branch.NEW
+    assert loaded.first_visit is True
+    assert loaded.kupat_cholim == "Clalit"
+    assert loaded.visit_type == VisitType.IN_PERSON
+
+
+@pytest.mark.asyncio
+async def test_clear_removes_protocol_data(
+    repo: RedisConversationRepository,
+) -> None:
+    await repo.set_protocol_state(PATIENT, ROUTE, ProtocolState.ASK_BIRTH_DATE)
+    await repo.set_protocol_context(PATIENT, ROUTE, ProtocolContext(branch=Branch.NEW))
+    await repo.save_messages(PATIENT, ROUTE, [Message(role=MessageRole.USER, content="x")])
+
+    await repo.clear(PATIENT, ROUTE)
+
+    assert await repo.get_protocol_state(PATIENT, ROUTE) == ProtocolState.ASK_INTENT
+    assert await repo.get_protocol_context(PATIENT, ROUTE) == ProtocolContext()
+    assert await repo.get_messages(PATIENT, ROUTE) == []

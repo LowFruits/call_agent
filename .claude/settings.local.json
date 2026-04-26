@@ -8,7 +8,13 @@
       "Bash(pytest -v)",
       "Bash(ruff check:*)",
       "Bash(mypy src/)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Read(//c/Users/TomerMassas/Documents/GitHub/meta/adr/**)",
+      "Read(//c/Users/TomerMassas/Documents/GitHub/meta/api-contracts/**)",
+      "Bash(pytest tests/unit/test_protocol_validators.py -q)",
+      "Bash(pytest tests/unit/test_conversation_repo.py tests/unit/test_file_conversation_repo.py -q)",
+      "Bash(pytest tests/unit/test_protocol_engine.py -q)",
+      "Bash(pytest tests/ -q)"
     ]
   }
 }

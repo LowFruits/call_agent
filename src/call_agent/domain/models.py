@@ -48,10 +48,12 @@ class Patient(BaseModel):
 
 class AppointmentType(BaseModel):
     id: UUID
-    clinic_id: UUID
+    doctor_id: UUID
     name: str
     duration_minutes: int
     is_active: bool = True
+    price_private: str | None = None
+    price_health_fund: str | None = None
     created_at: datetime | None = None
 
 

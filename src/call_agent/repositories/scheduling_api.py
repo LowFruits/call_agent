@@ -77,14 +77,11 @@ class SchedulingAPIClient:
         return Patient.model_validate(resp.json())
 
     async def list_appointment_types(
-        self, clinic_id: UUID | None = None, active_only: bool = True
+        self, doctor_id: UUID, active_only: bool = True
     ) -> list[AppointmentType]:
-        params: dict[str, str | bool] = {"active_only": active_only}
-        if clinic_id is not None:
-            params["clinic_id"] = str(clinic_id)
         resp = await self._client.get(
-            self._url("/appointment-types/"),
-            params=params,
+            self._url(f"/doctors/{doctor_id}/appointment-types"),
+            params={"active_only": active_only},
         )
         resp.raise_for_status()
         return [AppointmentType.model_validate(at) for at in resp.json()]
@@ -131,3 +128,21 @@ class SchedulingAPIClient:
         )
         resp.raise_for_status()
         return [Appointment.model_validate(a) for a in resp.json()]
+
+    async def create_message(
+        self,
+        doctor_id: UUID,
+        patient_phone: str,
+        body: str,
+        patient_name: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "doctor_id": str(doctor_id),
+            "patient_phone": patient_phone,
+            "body": body,
+        }
+        if patient_name is not None:
+            payload["patient_name"] = patient_name
+        resp = await self._client.post(self._url("/messages/"), json=payload)
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]

@@ -12,13 +12,15 @@ from call_agent.domain.models import Route
 from call_agent.repositories.conversation import RedisConversationRepository
 from call_agent.repositories.file_conversation import FileConversationRepository
 from call_agent.repositories.scheduling_api import SchedulingAPIClient
+from call_agent.services import MessageHandlerProtocol
 from call_agent.services.agent import AgentService
+from call_agent.services.protocol.engine import ProtocolEngine
 from call_agent.services.routing import RoutingService
 
 
 @dataclass
 class Container:
-    agent_service: AgentService
+    message_handler: MessageHandlerProtocol
     routing_service: RoutingService
     scheduling_api: SchedulingAPIClient
     httpx_client: httpx.AsyncClient
@@ -38,17 +40,27 @@ async def bootstrap(settings: Settings | None = None) -> Container:
 
     # Conversation store: Redis if configured, otherwise file-based
     redis_client: aioredis.Redis[bytes] | None = None
+    conversation_repo: (
+        RedisConversationRepository | FileConversationRepository
+    )
     if settings.redis_url:
         redis_client = aioredis.from_url(settings.redis_url)
         conversation_repo = RedisConversationRepository(redis=redis_client)
     else:
-        conversation_repo = FileConversationRepository()  # type: ignore[assignment]
+        conversation_repo = FileConversationRepository()
 
-    agent_service = AgentService(
-        openai_client=openai_client,
-        scheduling_api=scheduling_api,
-        conversation_repo=conversation_repo,
-    )
+    message_handler: MessageHandlerProtocol
+    if settings.use_protocol:
+        message_handler = ProtocolEngine(
+            scheduling_api=scheduling_api,
+            conversation_repo=conversation_repo,
+        )
+    else:
+        message_handler = AgentService(
+            openai_client=openai_client,
+            scheduling_api=scheduling_api,
+            conversation_repo=conversation_repo,
+        )
 
     # Build routing table
     routes: dict[str, Route] = {}
@@ -61,7 +73,7 @@ async def bootstrap(settings: Settings | None = None) -> Container:
     routing_service = RoutingService(routes)
 
     return Container(
-        agent_service=agent_service,
+        message_handler=message_handler,
         routing_service=routing_service,
         scheduling_api=scheduling_api,
         httpx_client=httpx_client,

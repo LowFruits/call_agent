@@ -14,6 +14,7 @@ from call_agent.domain.models import (
     Patient,
     TimeSlot,
 )
+from call_agent.domain.protocol import ProtocolContext, ProtocolState
 
 
 class SchedulingAPIProtocol(Protocol):
@@ -36,7 +37,7 @@ class SchedulingAPIProtocol(Protocol):
     ) -> Patient: ...
 
     async def list_appointment_types(
-        self, clinic_id: UUID | None = None, active_only: bool = True
+        self, doctor_id: UUID, active_only: bool = True
     ) -> list[AppointmentType]: ...
 
     async def get_available_slots(
@@ -53,6 +54,14 @@ class SchedulingAPIProtocol(Protocol):
         self, patient_id: UUID
     ) -> list[Appointment]: ...
 
+    async def create_message(
+        self,
+        doctor_id: UUID,
+        patient_phone: str,
+        body: str,
+        patient_name: str | None = None,
+    ) -> dict[str, Any]: ...
+
 
 class ConversationRepositoryProtocol(Protocol):
     async def get_messages(
@@ -61,6 +70,22 @@ class ConversationRepositoryProtocol(Protocol):
 
     async def save_messages(
         self, patient_phone: str, route_phone: str, messages: list[Message]
+    ) -> None: ...
+
+    async def get_protocol_state(
+        self, patient_phone: str, route_phone: str
+    ) -> ProtocolState: ...
+
+    async def set_protocol_state(
+        self, patient_phone: str, route_phone: str, state: ProtocolState
+    ) -> None: ...
+
+    async def get_protocol_context(
+        self, patient_phone: str, route_phone: str
+    ) -> ProtocolContext: ...
+
+    async def set_protocol_context(
+        self, patient_phone: str, route_phone: str, context: ProtocolContext
     ) -> None: ...
 
     async def clear(self, patient_phone: str, route_phone: str) -> None: ...

@@ -107,12 +107,15 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "function": {
             "name": "list_appointment_types",
             "description": (
-                "List available appointment types for the clinic "
-                "(e.g. checkup, consultation)."
+                "List available appointment types for a specific doctor "
+                "(e.g. checkup, consultation). Each doctor has their own catalog."
             ),
             "parameters": {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "doctor_id": {"type": "string", "description": "The doctor UUID"},
+                },
+                "required": ["doctor_id"],
             },
         },
     },
@@ -263,7 +266,7 @@ async def _execute_create_patient(
 async def _execute_list_appointment_types(
     api: SchedulingAPIProtocol, args: dict[str, Any], route: Route
 ) -> str:
-    types = await api.list_appointment_types(route.clinic_id)
+    types = await api.list_appointment_types(UUID(args["doctor_id"]))
     return json.dumps([t.model_dump(mode="json") for t in types])
 
 

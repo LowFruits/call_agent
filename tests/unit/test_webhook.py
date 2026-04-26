@@ -27,7 +27,7 @@ def app() -> FastAPI:
     agent_service = AsyncMock()
     agent_service.handle_message = AsyncMock(return_value="שלום! איך אוכל לעזור?")
 
-    test_app.state.agent_service = agent_service
+    test_app.state.message_handler = agent_service
     test_app.state.routing_service = routing_service
     return test_app
 

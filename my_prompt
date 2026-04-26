@@ -1,3 +1,51 @@
-1. a think something simple like the chat ui, it is mainly for me to communicate with the database (add info) and test the chat communication with the database and seeing that things are actually happening as expected
-2. yes just front end that talks with the scheduling api
-3. what you wrote plus: maybe a search bar to find info, something like sql questions
+Task: Switch to per-doctor appointment types
+
+  Context
+
+  The Database_Simulation backend (deployed at https://scheduling-simulation-api.onrender.com, source at LowFruits/Database_Simulation) just shipped a breaking change. Cross-repo decisions live at ~/Documents/GitHub/meta/. The
+  relevant ADR is meta/adr/009-appointment-type-scope.md. The current OpenAPI is at meta/api-contracts/scheduling-api.json (regenerated this session).
+
+  What changed
+
+  AppointmentType was clinic-scoped (clinic_id only). It is now doctor-scoped — every appointment type belongs to exactly one doctor. The schema migration ran in Neon today: existing appointment-type rows were fanned out
+  per-doctor, so all old appointment-type UUIDs are invalidated. New per-doctor UUIDs replaced them.
+
+  In addition, /scheduling/slots and the booking endpoint now strictly validate that appointment_type_id belongs to the requested doctor_id. Mismatched pairs return 4xx with a readable error. Previously the API silently
+  accepted mismatches.
+
+  What you need to do in this repo
+
+  1. Replace any call to GET /appointment-types/?clinic_id=... — that endpoint no longer exists. Switch to:
+  GET /doctors/{doctor_id}/appointment-types[?active_only=true]
+  1. The doctor is already known to the agent via phone-routing per ADR-006.
+  2. Flush any cached appointment-type UUIDs. Anywhere they live — conversation state in Redis (per ADR-007), function-call schemas, prompt templates, in-memory caches, fixtures used in tests. Old UUIDs return 404 now. Refetch
+  fresh per conversation.
+  3. Update POST /appointment-types/ callers (if any — you probably don't write to this from the chatbot). Body now requires doctor_id instead of clinic_id.
+  4. Audit any place you pair (doctor_id, appointment_type_id) when calling /scheduling/slots or /scheduling/appointments/book. If your code can ever produce a mismatched pair, the request will now fail. Add a guard or test.
+
+  Workflow
+
+  1. Audit first. Grep this repo for clinic_id, appointment_type, appointment-types. Tell me what you find — every call site, every cached value, every test fixture. Don't modify anything yet.
+  2. Propose changes. Show me which files you'd touch and what the new shape looks like. Get sign-off.
+  3. Implement — code, tests, prompt schemas, Redis cleanup if needed. Make sure tests pass against the live backend or a mock that mirrors the new contract.
+  4. Coordinate the deploy with the user — once your changes go live, the chatbot will be in sync with the new backend contract.
+
+  Tests to add
+
+  - Unit/integration: a request to /scheduling/slots with a mismatched (doctor_id, type_id) pair returns the documented error and the chatbot handles it gracefully (clear user-facing message, doesn't crash).
+  - Unit/integration: appointment-type listing for a known doctor returns only that doctor's catalog, not a clinic-wide one.
+
+  Out of scope
+
+  - Any backend changes — those are done.
+  - Per-appointment-type availability windows (deferred per ADR-008).
+  - The broader question of whether clinic_id is redundant across the domain (deferred to a future ADR-010).
+
+  Definition of done
+
+  - Audit findings shared with user.
+  - All clinic-scoped appointment-type calls replaced with doctor-scoped ones.
+  - All cached UUIDs flushed; tests verify a fresh fetch happens per conversation.
+  - Slot/book flows handle the new mismatch error with a clear user-facing message.
+  - Tests pass against the new contract.
+  - Deployed. Confirm the chatbot still books appointments end-to-end against the live backend.

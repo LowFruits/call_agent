@@ -79,7 +79,7 @@ class FakeSchedulingAPI:
         )
 
     async def list_appointment_types(
-        self, clinic_id: UUID, active_only: bool = True
+        self, doctor_id: UUID, active_only: bool = True
     ) -> list[AppointmentType]:
         return []
 

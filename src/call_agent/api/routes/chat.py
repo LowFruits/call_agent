@@ -8,10 +8,10 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from call_agent.api.deps import get_agent_service, get_scheduling_api
+from call_agent.api.deps import get_message_handler, get_scheduling_api
 from call_agent.domain.models import Route
 from call_agent.repositories.scheduling_api import SchedulingAPIClient
-from call_agent.services.agent import AgentService
+from call_agent.services import MessageHandlerProtocol
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ async def list_doctors(
 @router.post("/send", response_model=ChatResponse)
 async def send_message(
     req: ChatRequest,
-    agent: AgentService = Depends(get_agent_service),
+    handler: MessageHandlerProtocol = Depends(get_message_handler),
     api: SchedulingAPIClient = Depends(get_scheduling_api),
 ) -> ChatResponse:
     doctor = await api.get_doctor(UUID(req.doctor_id))
@@ -71,7 +71,7 @@ async def send_message(
         clinic_id=doctor.clinic_id,
         doctor_id=doctor.id,
     )
-    reply = await agent.handle_message(
+    reply = await handler.handle_message(
         patient_phone=_PATIENT_PHONE,
         route=route,
         text=req.message,

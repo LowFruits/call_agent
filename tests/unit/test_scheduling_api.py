@@ -45,10 +45,12 @@ PATIENT_JSON = {
 
 APPT_TYPE_JSON = {
     "id": str(APPT_TYPE_ID),
-    "clinic_id": str(CLINIC_ID),
+    "doctor_id": str(DOCTOR_ID),
     "name": "Checkup",
     "duration_minutes": 30,
     "is_active": True,
+    "price_private": None,
+    "price_health_fund": None,
 }
 
 APPOINTMENT_JSON = {
@@ -161,13 +163,17 @@ async def test_create_patient() -> None:
 
 @pytest.mark.asyncio
 async def test_list_appointment_types() -> None:
+    captured_url: dict[str, str] = {}
+
     def handler(request: httpx.Request) -> httpx.Response:
+        captured_url["path"] = request.url.path
         return httpx.Response(200, json=[APPT_TYPE_JSON])
 
     client = _make_client(handler)
-    types = await client.list_appointment_types(CLINIC_ID)
+    types = await client.list_appointment_types(DOCTOR_ID)
     assert len(types) == 1
     assert types[0].duration_minutes == 30
+    assert captured_url["path"] == f"/doctors/{DOCTOR_ID}/appointment-types"
 
 
 @pytest.mark.asyncio

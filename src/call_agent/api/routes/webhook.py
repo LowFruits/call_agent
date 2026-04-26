@@ -4,9 +4,9 @@ import logging
 
 from fastapi import APIRouter, Depends, Response
 
-from call_agent.api.deps import get_agent_service, get_routing_service
+from call_agent.api.deps import get_message_handler, get_routing_service
 from call_agent.domain.schemas import TwilioWebhookPayload
-from call_agent.services.agent import AgentService
+from call_agent.services import MessageHandlerProtocol
 from call_agent.services.routing import RoutingService
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ def _twiml_message(text: str) -> Response:
 @router.post("/twilio")
 async def twilio_webhook(
     payload: TwilioWebhookPayload = Depends(TwilioWebhookPayload.from_form),
-    agent: AgentService = Depends(get_agent_service),
+    handler: MessageHandlerProtocol = Depends(get_message_handler),
     routing: RoutingService = Depends(get_routing_service),
 ) -> Response:
     route = routing.resolve(payload.to_number)
@@ -33,7 +33,7 @@ async def twilio_webhook(
         logger.warning("No route for %s", payload.to_number)
         return _twiml_message("מצטערים, מספר זה אינו מוגדר במערכת.")
 
-    reply = await agent.handle_message(
+    reply = await handler.handle_message(
         patient_phone=payload.from_number,
         route=route,
         text=payload.body,
