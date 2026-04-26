@@ -86,12 +86,21 @@
             }
         }
 
-        function selectDoctor(doctor) {
+        async function selectDoctor(doctor) {
             selectedDoctorId = doctor.id;
+            // Dev/QA: wipe any prior state for this doctor so each test starts fresh
+            try {
+                await fetch("/chat/reset", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ doctor_id: doctor.id }),
+                });
+            } catch (e) { /* non-fatal — proceed anyway */ }
             document.getElementById("doctor-display").textContent = doctor.name;
             document.getElementById("specialty-display").textContent = doctor.specialty;
             document.getElementById("doctor-select").style.display = "none";
             document.getElementById("chat-view").style.display = "flex";
+            document.getElementById("messages").innerHTML = "";
             document.getElementById("msg-input").focus();
         }
 

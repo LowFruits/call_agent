@@ -9,6 +9,7 @@ import redis.asyncio as aioredis
 
 from call_agent.config import Settings
 from call_agent.domain.models import Route
+from call_agent.repositories import ConversationRepositoryProtocol
 from call_agent.repositories.conversation import RedisConversationRepository
 from call_agent.repositories.file_conversation import FileConversationRepository
 from call_agent.repositories.scheduling_api import SchedulingAPIClient
@@ -23,6 +24,7 @@ class Container:
     message_handler: MessageHandlerProtocol
     routing_service: RoutingService
     scheduling_api: SchedulingAPIClient
+    conversation_repo: ConversationRepositoryProtocol
     httpx_client: httpx.AsyncClient
     redis_client: aioredis.Redis | None = field(default=None)  # type: ignore[type-arg]
 
@@ -76,6 +78,7 @@ async def bootstrap(settings: Settings | None = None) -> Container:
         message_handler=message_handler,
         routing_service=routing_service,
         scheduling_api=scheduling_api,
+        conversation_repo=conversation_repo,
         httpx_client=httpx_client,
         redis_client=redis_client,
     )

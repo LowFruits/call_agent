@@ -1,51 +1,49 @@
-Task: Switch to per-doctor appointment types
+  Database_Simulation: timezone fix shipped (Option A, as you proposed)
 
-  Context
+  Status: deployed and live. Ship lockstep on your end at your convenience.
 
-  The Database_Simulation backend (deployed at https://scheduling-simulation-api.onrender.com, source at LowFruits/Database_Simulation) just shipped a breaking change. Cross-repo decisions live at ~/Documents/GitHub/meta/. The
-  relevant ADR is meta/adr/009-appointment-type-scope.md. The current OpenAPI is at meta/api-contracts/scheduling-api.json (regenerated this session).
+  What changed in the API
 
-  What changed
+  Per your timezone bug report — Option A is now in effect. Every datetime on the wire is tz-aware ISO with offset:
 
-  AppointmentType was clinic-scoped (clinic_id only). It is now doctor-scoped — every appointment type belongs to exactly one doctor. The schema migration ran in Neon today: existing appointment-type rows were fanned out
-  per-doctor, so all old appointment-type UUIDs are invalidated. New per-doctor UUIDs replaced them.
+  - GET /scheduling/slots returns Asia/Jerusalem:
+  "start_time": "2099-06-01T09:00:00+03:00" (or +02:00 in winter, DST-aware).
+  - POST /scheduling/appointments/book requires tz-aware start_time. Naive datetimes are now rejected with 422 (Pydantic validation error). You can send Asia/Jerusalem (most natural — same as what you got from /slots) or any
+  other tz; the backend converts to UTC internally.
+  - All appointment reads (GET /appointments/..., response of POST /book) return UTC with Z suffix:
+  "start_time": "2099-06-01T06:00:00Z".
+  This represents the same instant as the offered slot. Any date library (luxon, date-fns, dayjs, JS native) parses both representations and lets you compare instants directly.
+  - All other timestamps (created_at, updated_at, cancelled_at, plus read_at/replied_at on Messages) are also tz-aware UTC.
 
-  In addition, /scheduling/slots and the booking endpoint now strictly validate that appointment_type_id belongs to the requested doctor_id. Mismatched pairs return 4xx with a readable error. Previously the API silently
-  accepted mismatches.
+  What you need to do
 
-  What you need to do in this repo
+  Per your own prompt's "Coordination" section — you said: "For Option A: call_agent will tag outgoing times with Asia/Jerusalem and accept tz-aware responses."
 
-  1. Replace any call to GET /appointment-types/?clinic_id=... — that endpoint no longer exists. Switch to:
-  GET /doctors/{doctor_id}/appointment-types[?active_only=true]
-  1. The doctor is already known to the agent via phone-routing per ADR-006.
-  2. Flush any cached appointment-type UUIDs. Anywhere they live — conversation state in Redis (per ADR-007), function-call schemas, prompt templates, in-memory caches, fixtures used in tests. Old UUIDs return 404 now. Refetch
-  fresh per conversation.
-  3. Update POST /appointment-types/ callers (if any — you probably don't write to this from the chatbot). Body now requires doctor_id instead of clinic_id.
-  4. Audit any place you pair (doctor_id, appointment_type_id) when calling /scheduling/slots or /scheduling/appointments/book. If your code can ever produce a mismatched pair, the request will now fail. Add a guard or test.
+  Concretely:
 
-  Workflow
+  1. When sending POST /scheduling/appointments/book, ensure start_time is tz-aware. If you pass through the value from /scheduling/slots, it's already +03:00-tagged — works directly. If you construct from a wall-clock string
+  with implicit Jerusalem context, attach Asia/Jerusalem tzinfo before serializing.
+  2. When parsing slot or appointment responses, stop assuming naive datetimes. Whichever date library you use, parse the offset (it's always present now). Compare as instants, not wall-clock strings.
+  3. No URL changes — endpoint paths are unchanged.
+  4. No data migration on your side — pre-existing test rows in Neon were just naive UTC values; on read they now appear with Z suffix. Same instants.
 
-  1. Audit first. Grep this repo for clinic_id, appointment_type, appointment-types. Tell me what you find — every call site, every cached value, every test fixture. Don't modify anything yet.
-  2. Propose changes. Show me which files you'd touch and what the new shape looks like. Get sign-off.
-  3. Implement — code, tests, prompt schemas, Redis cleanup if needed. Make sure tests pass against the live backend or a mock that mirrors the new contract.
-  4. Coordinate the deploy with the user — once your changes go live, the chatbot will be in sync with the new backend contract.
+  Acceptance criterion (from your prompt)
 
-  Tests to add
+  ▎ Books an appointment for slot 09:00 and verifies the resulting GET /appointments/by-patient row reports the same wall-clock time
 
-  - Unit/integration: a request to /scheduling/slots with a mismatched (doctor_id, type_id) pair returns the documented error and the chatbot handles it gracefully (clear user-facing message, doesn't crash).
-  - Unit/integration: appointment-type listing for a known doctor returns only that doctor's catalog, not a clinic-wide one.
+  ✅ Verified locally. Slot offered as 09:00+03:00, booking stored, GET-back returns 06:00Z, and 06:00Z.astimezone(Asia/Jerusalem) == 09:00. Same instant, two representations.
 
-  Out of scope
+  Latent input bug also fixed
 
-  - Any backend changes — those are done.
+  Aside: the previous code used request.start_time.replace(tzinfo=tz) which silently relabeled the caller's tz as Jerusalem. If you'd ever sent 09:00+00:00, it would have been mis-stored. That's now
+  request.start_time.astimezone(UTC) — honors whatever tz you send.
+
+  OpenAPI
+
+  meta/api-contracts/scheduling-api.json regenerated; reflects the live backend. Pull meta once Tomer commits there.
+
+  Out of scope (still)
+
   - Per-appointment-type availability windows (deferred per ADR-008).
-  - The broader question of whether clinic_id is redundant across the domain (deferred to a future ADR-010).
-
-  Definition of done
-
-  - Audit findings shared with user.
-  - All clinic-scoped appointment-type calls replaced with doctor-scoped ones.
-  - All cached UUIDs flushed; tests verify a fresh fetch happens per conversation.
-  - Slot/book flows handle the new mismatch error with a clear user-facing message.
-  - Tests pass against the new contract.
-  - Deployed. Confirm the chatbot still books appointments end-to-end against the live backend.
+  - Broader clinic_id removal across Doctor/Appointment/Clinic (deferred to ADR-010).
+  - time fields on AvailabilityRule / CalendarException (still naive time — they represent clinic-local hours-of-day with no date, so tz doesn't apply).

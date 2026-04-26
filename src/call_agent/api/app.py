@@ -16,6 +16,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.message_handler = container.message_handler
     app.state.routing_service = container.routing_service
     app.state.scheduling_api = container.scheduling_api
+    app.state.conversation_repo = container.conversation_repo
     yield
     await shutdown(container)
 
