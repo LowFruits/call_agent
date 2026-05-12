@@ -8,9 +8,8 @@ from call_agent.domain.protocol import (
     Branch,
     ExistingAction,
     RescheduleChangeField,
-    TimeWindow,
     VisitType,
-    WhenPreference,
+    WhenMode,
 )
 from call_agent.services.protocol.validators import (
     is_valid_israeli_id,
@@ -20,9 +19,8 @@ from call_agent.services.protocol.validators import (
     parse_int_choice,
     parse_intent,
     parse_reschedule_change_field,
-    parse_time_window,
     parse_visit_type,
-    parse_when_preference,
+    parse_when_mode,
     parse_yes_no,
 )
 
@@ -116,7 +114,7 @@ def test_parse_intent_unknown() -> None:
 
 
 # ---------------------------------------------------------------------------
-# parse_visit_type / time_window / when_preference
+# parse_visit_type / when_mode
 # ---------------------------------------------------------------------------
 
 def test_parse_visit_type() -> None:
@@ -126,16 +124,12 @@ def test_parse_visit_type() -> None:
     assert parse_visit_type("xyz") is None
 
 
-def test_parse_time_window() -> None:
-    assert parse_time_window("בוקר") == TimeWindow.MORNING
-    assert parse_time_window("אחר הצהריים") == TimeWindow.AFTERNOON
-    assert parse_time_window("1") == TimeWindow.MORNING
-
-
-def test_parse_when_preference() -> None:
-    assert parse_when_preference("1") == WhenPreference.SOONEST
-    assert parse_when_preference("השבוע") == WhenPreference.THIS_WEEK
-    assert parse_when_preference("יום ספציפי") == WhenPreference.SPECIFIC_DATE
+def test_parse_when_mode() -> None:
+    assert parse_when_mode("1") == WhenMode.CLOSEST
+    assert parse_when_mode("2") == WhenMode.SPECIFIC_DATE
+    assert parse_when_mode("הקרוב ביותר") == WhenMode.CLOSEST
+    assert parse_when_mode("תאריך ספציפי") == WhenMode.SPECIFIC_DATE
+    assert parse_when_mode("xyz") is None
 
 
 # ---------------------------------------------------------------------------

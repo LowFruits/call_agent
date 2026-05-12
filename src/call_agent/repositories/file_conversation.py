@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from call_agent.domain.models import Message
 from call_agent.domain.protocol import ProtocolContext, ProtocolState
+
+logger = logging.getLogger(__name__)
 
 _DEFAULT_PATH = Path("data/conversations.json")
 
@@ -63,7 +68,11 @@ class FileConversationRepository:
         value = entry.get("state")
         if value is None:
             return ProtocolState.ASK_INTENT
-        return ProtocolState(value)
+        try:
+            return ProtocolState(value)
+        except ValueError:
+            logger.warning("unknown protocol state %r — resetting", value)
+            return ProtocolState.ASK_INTENT
 
     async def set_protocol_state(
         self, patient_phone: str, route_phone: str, state: ProtocolState
@@ -79,7 +88,14 @@ class FileConversationRepository:
         data = entry.get("context")
         if data is None:
             return ProtocolContext()
-        return ProtocolContext.model_validate(data)
+        try:
+            return ProtocolContext.model_validate(data)
+        except ValidationError:
+            logger.warning(
+                "stored protocol context for %s:%s failed to deserialize — resetting",
+                patient_phone, route_phone,
+            )
+            return ProtocolContext()
 
     async def set_protocol_context(
         self, patient_phone: str, route_phone: str, context: ProtocolContext

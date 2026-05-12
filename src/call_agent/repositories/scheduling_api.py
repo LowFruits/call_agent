@@ -12,6 +12,7 @@ from call_agent.domain.models import (
     BookRequest,
     Clinic,
     Doctor,
+    DoctorAvailability,
     Patient,
     TimeSlot,
 )
@@ -85,6 +86,15 @@ class SchedulingAPIClient:
         )
         resp.raise_for_status()
         return [AppointmentType.model_validate(at) for at in resp.json()]
+
+    async def get_doctor_availability(
+        self, doctor_id: UUID
+    ) -> DoctorAvailability:
+        resp = await self._client.get(
+            self._url(f"/doctors/{doctor_id}/availability")
+        )
+        resp.raise_for_status()
+        return DoctorAvailability.model_validate(resp.json())
 
     async def get_available_slots(
         self, doctor_id: UUID, slot_date: date, appointment_type_id: UUID

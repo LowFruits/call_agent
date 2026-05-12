@@ -19,7 +19,11 @@ INTENT_NOT_UNDERSTOOD = (
 
 # --- New booking ---
 
-ASK_FIRST_VISIT = "האם זה הביקור הראשון שלך אצל הרופא? (כן/לא)"
+ASK_FIRST_VISIT = (
+    "האם זה הביקור הראשון שלך אצל הרופא?\n"
+    "1. כן\n"
+    "2. לא"
+)
 
 ASK_KUPAT_CHOLIM = (
     "מאיזה קופת חולים אתה?\n"
@@ -32,7 +36,9 @@ ASK_KUPAT_CHOLIM = (
 
 CONFIRM_PRIVATE = (
     "במסלול פרטי יש עלות נוספת על התור.\n"
-    "האם להמשיך עם תור פרטי? (כן/לא)"
+    "האם להמשיך עם תור פרטי?\n"
+    "1. כן\n"
+    "2. לא"
 )
 
 ASK_BIRTH_DATE = "מה תאריך הלידה שלך? (פורמט: יום/חודש/שנה)"
@@ -44,7 +50,11 @@ ASK_VISIT_TYPE = (
     "2. פרונטלי (במרפאה)"
 )
 
-ASK_FOR_SELF = "האם התור עבורך? (כן/לא)"
+ASK_FOR_SELF = (
+    "האם התור עבורך?\n"
+    "1. כן\n"
+    "2. לא"
+)
 ASK_OTHER_NAME = "מה שם המטופל עבורו התור?"
 ASK_OTHER_ID = "מה תעודת הזהות של המטופל? (9 ספרות)"
 ASK_OTHER_RELATION = "מה הקרבה שלך אליו? (למשל: בן, אמא, בן/בת זוג)"
@@ -55,29 +65,65 @@ INVALID_ID = "תעודת זהות לא תקינה. אנא הקלד 9 ספרות 
 ASK_NAME = "מה השם המלא שלך?"
 
 ASK_SMS_CONSENT = (
-    "האם תרצה לקבל הודעת אישור עם פרטי התור? (כן/לא)\n"
-    "(שירות זה כרוך בעלות נוספת)"
+    "האם תרצה לקבל הודעת אישור עם פרטי התור?\n"
+    "(שירות זה כרוך בעלות נוספת)\n"
+    "1. כן\n"
+    "2. לא"
 )
 
 # --- Time selection sub-FSM ---
 
-ASK_TIME_WINDOW = (
-    "באיזה שעות תרצה תור?\n"
-    "1. בוקר עד צהריים\n"
-    "2. אחר הצהריים עד ערב"
+ASK_TIME_MODE = (
+    "איך תרצה לבחור מועד לתור?\n"
+    "1. התורים הקרובים ביותר\n"
+    "2. תאריך מסוים"
 )
 
-ASK_WHEN = (
-    "למתי תרצה לקבוע?\n"
-    "1. הקרוב ביותר\n"
-    "2. במהלך השבוע הקרוב\n"
-    "3. תאריך ספציפי"
+WORKING_DAYS_TEMPLATE = (
+    "הרופא מקבל בימי: {days}.\n"
+    "מה התאריך שתרצה? (יום/חודש/שנה)"
 )
 
 ASK_SPECIFIC_DATE = "מה התאריך שתרצה? (יום/חודש/שנה)"
-NO_SLOTS_AVAILABLE = "מצטערים, לא נמצאו תורים זמינים בטווח שביקשת. ננסה טווח אחר?"
+
+DATE_NOT_WORKING_DAY = (
+    "הרופא לא מקבל בתאריך זה.\n"
+    "אנא בחר תאריך אחר (יום/חודש/שנה)."
+)
+
+# Closest-slot offer. {listing} renders the numbered slot list grouped by window.
+OFFER_CLOSEST_TEMPLATE = (
+    "להלן התורים הזמינים הקרובים ביותר:\n\n"
+    "{listing}\n\n"
+    "בחר מספר, או כתוב 'לא' לאפשרויות נוספות."
+)
+
+# Specific-date offer — 3 slots spread across the day.
+OFFER_DATE_SLOTS_TEMPLATE = (
+    "תורים זמינים בתאריך {date_str}:\n\n"
+    "{listing}\n\n"
+    "בחר מספר, או כתוב 'לא' לאפשרויות נוספות."
+)
+
+NO_MORE_DATE_SLOTS = (
+    "אין עוד תורים זמינים בתאריך זה.\n"
+    "אנא בחר תאריך אחר (יום/חודש/שנה)."
+)
+
+# Fallback when literally no slots exist for the next half year.
+NO_SLOTS_HALF_YEAR_OFFER_MESSAGE = (
+    "אין תורים פנויים בששת החודשים הקרובים.\n"
+    "האם תרצה להשאיר הודעה למזכירה?\n"
+    "1. כן\n"
+    "2. לא"
+)
+
 BOOKING_SLOT_GONE = "התור הזה אינו זמין יותר. ננסה למצוא תור אחר."
-OFFER_SLOT_TEMPLATE = "מצאתי תור פנוי: {when}.\nמאשר? (כן/לא)"
+
+# Window-bucket headers used by the closest listing.
+WINDOW_LABEL_MORNING = "בוקר"
+WINDOW_LABEL_NOON = "צהריים"
+WINDOW_LABEL_EVENING = "ערב"
 
 # --- Existing appointment ---
 
@@ -96,7 +142,11 @@ ASK_MORE_INFO_QUESTION = (
     "מה תרצה לדעת על התור? נציג אנושי יחזור אליך עם המידע."
 )
 
-CONFIRM_CANCEL = "האם אתה בטוח שברצונך לבטל את התור? (כן/לא)"
+CONFIRM_CANCEL = (
+    "האם אתה בטוח שברצונך לבטל את התור?\n"
+    "1. כן\n"
+    "2. לא"
+)
 CANCELLED_CONFIRMATION = "התור בוטל בהצלחה. בריאות טובה!"
 CANCEL_ABORTED = "ביטול הופסק. התור נשאר במערכת."
 
@@ -123,13 +173,17 @@ MESSAGE_SAVED = "תודה! ההודעה נשמרה ונציג יחזור אלי�
 SUMMARY_CONFIRM_NEW_TEMPLATE = (
     "סיכום התור החדש:\n"
     "{summary}\n\n"
-    "לאשר ולקבוע? (כן/לא)"
+    "לאשר ולקבוע?\n"
+    "1. כן\n"
+    "2. לא"
 )
 
 SUMMARY_CONFIRM_RESCHEDULE_TEMPLATE = (
     "סיכום השינוי:\n"
     "{summary}\n\n"
-    "לאשר את השינוי? (כן/לא)"
+    "לאשר את השינוי?\n"
+    "1. כן\n"
+    "2. לא"
 )
 
 BOOKING_DONE = "התור נקבע בהצלחה!"

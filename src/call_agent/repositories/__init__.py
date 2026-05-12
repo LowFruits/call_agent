@@ -10,6 +10,7 @@ from call_agent.domain.models import (
     BookRequest,
     Clinic,
     Doctor,
+    DoctorAvailability,
     Message,
     Patient,
     TimeSlot,
@@ -39,6 +40,10 @@ class SchedulingAPIProtocol(Protocol):
     async def list_appointment_types(
         self, doctor_id: UUID, active_only: bool = True
     ) -> list[AppointmentType]: ...
+
+    async def get_doctor_availability(
+        self, doctor_id: UUID
+    ) -> DoctorAvailability: ...
 
     async def get_available_slots(
         self, doctor_id: UUID, slot_date: date, appointment_type_id: UUID

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 import fakeredis.aioredis
 import httpx
@@ -12,9 +13,11 @@ from call_agent.domain.enums import AppointmentStatus, BookedBy
 from call_agent.domain.models import (
     Appointment,
     AppointmentType,
+    AvailabilityRule,
     BookRequest,
     Clinic,
     Doctor,
+    DoctorAvailability,
     Patient,
     Route,
     TimeSlot,
@@ -22,6 +25,9 @@ from call_agent.domain.models import (
 from call_agent.domain.protocol import ProtocolState
 from call_agent.repositories.conversation import RedisConversationRepository
 from call_agent.services.protocol.engine import ProtocolEngine
+
+_JRM = ZoneInfo("Asia/Jerusalem")
+_ALL_DAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 CLINIC_ID = UUID("11111111-1111-1111-1111-111111111111")
 DOCTOR_ID = UUID("22222222-2222-2222-2222-222222222222")
@@ -42,6 +48,9 @@ class FakeAPI:
         self.patient_exists = True
         self.has_existing_appt = False
         self.raise_on_slots = False
+        # New: control availability for time-selection redesign tests
+        self.working_days: list[str] = list(_ALL_DAYS)
+        self.empty_slots = False
 
     async def get_clinic(self, clinic_id: UUID) -> Clinic:
         return Clinic(id=clinic_id, name="Test", address="x", phone="0")
@@ -90,6 +99,22 @@ class FakeAPI:
             ),
         ]
 
+    async def get_doctor_availability(
+        self, doctor_id: UUID
+    ) -> DoctorAvailability:
+        rules = [
+            AvailabilityRule(
+                doctor_id=doctor_id,
+                day_of_week=day,
+                start_time="09:00",
+                end_time="17:00",
+            )
+            for day in self.working_days
+        ]
+        return DoctorAvailability(
+            doctor_id=doctor_id, rules=rules, exceptions=[]
+        )
+
     async def get_available_slots(
         self, doctor_id: UUID, slot_date: date, appointment_type_id: UUID
     ) -> list[TimeSlot]:
@@ -99,11 +124,18 @@ class FakeAPI:
             raise httpx.HTTPStatusError(
                 "doctor/type mismatch", request=request, response=response
             )
-        # Always return one morning slot
-        start = datetime.combine(slot_date, datetime.min.time()).replace(
-            hour=10, tzinfo=UTC
-        )
-        return [TimeSlot(start_time=start, end_time=start + timedelta(minutes=30))]
+        if self.empty_slots:
+            return []
+        # Three slots in Asia/Jerusalem time: one in each window.
+        slots: list[TimeSlot] = []
+        for hour in (9, 13, 16):
+            start = datetime.combine(slot_date, datetime.min.time()).replace(
+                hour=hour, tzinfo=_JRM
+            )
+            slots.append(
+                TimeSlot(start_time=start, end_time=start + timedelta(minutes=30))
+            )
+        return slots
 
     async def book_appointment(self, request: BookRequest) -> Appointment:
         self.booked.append(request)
@@ -227,19 +259,17 @@ async def test_new_booking_for_self_happy_path(
     await engine.handle_message(PATIENT_PHONE, route, "01/01/1990")
     # 5. Visit type: phone
     await engine.handle_message(PATIENT_PHONE, route, "1")
-    # 6. Time window: morning
+    # 6. Time mode: closest (offers slots)
     await engine.handle_message(PATIENT_PHONE, route, "1")
-    # 7. When: soonest (offers a slot)
+    # 7. Pick first slot
     await engine.handle_message(PATIENT_PHONE, route, "1")
-    # 8. Confirm slot: yes
+    # 8. For self: yes
     await engine.handle_message(PATIENT_PHONE, route, "כן")
-    # 9. For self: yes
-    await engine.handle_message(PATIENT_PHONE, route, "כן")
-    # 10. Patient ID (valid)
+    # 9. Patient ID (valid)
     await engine.handle_message(PATIENT_PHONE, route, "123456782")
-    # 11. SMS consent: no
+    # 10. SMS consent: no
     await engine.handle_message(PATIENT_PHONE, route, "לא")
-    # 12. Confirm summary: yes
+    # 11. Confirm summary: yes
     final = await engine.handle_message(PATIENT_PHONE, route, "כן")
 
     assert "התור נקבע" in final
@@ -272,8 +302,9 @@ async def test_private_kupah_triggers_confirm(
 async def test_invalid_id_reprompts(
     engine: ProtocolEngine, route: Route
 ) -> None:
-    # Walk to ASK_PATIENT_ID
-    msgs = ["2", "כן", "1", "01/01/1990", "1", "1", "1", "כן", "כן"]
+    # Walk to ASK_PATIENT_ID via the new shorter path
+    # ("2"=new, "כן"=first, "1"=Clalit, birth, "1"=phone, "1"=closest, "1"=slot, "כן"=for self)
+    msgs = ["2", "כן", "1", "01/01/1990", "1", "1", "1", "כן"]
     for m in msgs:
         await engine.handle_message(PATIENT_PHONE, route, m)
     # Now at ASK_PATIENT_ID — send bad ID
@@ -346,11 +377,10 @@ async def test_reschedule_change_visit_type_loops(
     await engine.handle_message(PATIENT_PHONE, route, "1")
     # Action: reschedule (2)
     await engine.handle_message(PATIENT_PHONE, route, "2")
-    # Time-selection: window=morning, when=soonest
+    # Mode: closest → offers slots
     await engine.handle_message(PATIENT_PHONE, route, "1")
+    # Pick first offered slot
     await engine.handle_message(PATIENT_PHONE, route, "1")
-    # Now at TS_OFFER_SLOT — confirm
-    await engine.handle_message(PATIENT_PHONE, route, "כן")
     # Now at RESCHEDULE_OFFER_SLOT 3-way — pick "change something else" (3)
     reply = await engine.handle_message(PATIENT_PHONE, route, "3")
     # Should be at change menu
@@ -382,6 +412,151 @@ async def test_after_done_restarts(
 
 
 # ---------------------------------------------------------------------------
+# Declined-slot memory (decline cycles the offered batch)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_declined_slot_not_reoffered_same_date(
+    engine: ProtocolEngine, route: Route, fake_api: FakeAPI
+) -> None:
+    # Walk to TS_ASK_MODE
+    for m in ["2", "כן", "1", "01/01/1990", "1"]:
+        await engine.handle_message(PATIENT_PHONE, route, m)
+    # Pick specific-date mode → enter a working-day date
+    await engine.handle_message(PATIENT_PHONE, route, "2")
+    target_date = (datetime.now(UTC).date() + timedelta(days=3)).strftime("%d/%m/%Y")
+    reply = await engine.handle_message(PATIENT_PHONE, route, target_date)
+    # 3 slots offered, numbered 1..3
+    assert "1." in reply and "3." in reply
+    # Decline → all 3 added to declined; refetch yields nothing → asks new date
+    reply = await engine.handle_message(PATIENT_PHONE, route, "לא")
+    assert "אין עוד" in reply or "תאריך אחר" in reply
+
+
+# ---------------------------------------------------------------------------
+# Non-working day rejection
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_specific_date_rejects_non_working_day(
+    engine: ProtocolEngine, route: Route, fake_api: FakeAPI
+) -> None:
+    # Doctor works only Sun-Thu (close on Fri+Sat).
+    fake_api.working_days = ["sunday", "monday", "tuesday", "wednesday", "thursday"]
+    for m in ["2", "כן", "1", "01/01/1990", "1"]:
+        await engine.handle_message(PATIENT_PHONE, route, m)
+    await engine.handle_message(PATIENT_PHONE, route, "2")  # specific mode
+    # Find next Saturday (weekday=5)
+    d = datetime.now(UTC).date()
+    while d.weekday() != 5:
+        d += timedelta(days=1)
+    reply = await engine.handle_message(
+        PATIENT_PHONE, route, d.strftime("%d/%m/%Y")
+    )
+    assert "לא מקבל" in reply or "אחר" in reply
+
+
+# ---------------------------------------------------------------------------
+# Half-year exhaustion → leave-a-message fallback
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_no_slots_fallback_routes_to_message(
+    engine: ProtocolEngine, route: Route, fake_api: FakeAPI
+) -> None:
+    fake_api.empty_slots = True
+    for m in ["2", "כן", "1", "01/01/1990", "1"]:
+        await engine.handle_message(PATIENT_PHONE, route, m)
+    # Closest mode → no slots anywhere in 180 days → offer message
+    reply = await engine.handle_message(PATIENT_PHONE, route, "1")
+    assert "שישה" in reply or "ששת" in reply or "להשאיר הודעה" in reply
+    # Yes → COLLECT_MESSAGE
+    reply = await engine.handle_message(PATIENT_PHONE, route, "כן")
+    assert "הודעה" in reply
+    # Type message → saved
+    final = await engine.handle_message(PATIENT_PHONE, route, "לא דחוף")
+    assert "נשמרה" in final or "תודה" in final
+    assert len(fake_api.messages_created) == 1
+
+
+# ---------------------------------------------------------------------------
+# Navigation: 99 = back, 0 = restart
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_back_returns_to_previous_state(
+    engine: ProtocolEngine, route: Route, repo: RedisConversationRepository
+) -> None:
+    # Step into the flow: intent NEW → ASK_FIRST_VISIT → ASK_KUPAT_CHOLIM
+    await engine.handle_message(PATIENT_PHONE, route, "2")
+    await engine.handle_message(PATIENT_PHONE, route, "כן")
+    # Now at ASK_KUPAT_CHOLIM. Press 99.
+    reply = await engine.handle_message(PATIENT_PHONE, route, "99")
+    # Returned to ASK_FIRST_VISIT
+    state = await repo.get_protocol_state(PATIENT_PHONE, ROUTE_PHONE)
+    assert state == ProtocolState.ASK_FIRST_VISIT
+    assert "ביקור הראשון" in reply
+
+
+@pytest.mark.asyncio
+async def test_restart_returns_to_greeting(
+    engine: ProtocolEngine, route: Route, repo: RedisConversationRepository
+) -> None:
+    # Step deep into the flow
+    for m in ["2", "כן", "1", "01/01/1990", "1"]:
+        await engine.handle_message(PATIENT_PHONE, route, m)
+    # Restart
+    reply = await engine.handle_message(PATIENT_PHONE, route, "0")
+    state = await repo.get_protocol_state(PATIENT_PHONE, ROUTE_PHONE)
+    assert state == ProtocolState.ASK_INTENT
+    assert "במה אפשר לעזור" in reply
+
+
+@pytest.mark.asyncio
+async def test_nav_hint_appended_in_flow(
+    engine: ProtocolEngine, route: Route
+) -> None:
+    await engine.handle_message(PATIENT_PHONE, route, "2")  # intent
+    reply = await engine.handle_message(PATIENT_PHONE, route, "כן")
+    assert "99" in reply and "0" in reply
+    assert "חזור" in reply or "מחדש" in reply
+
+
+@pytest.mark.asyncio
+async def test_nav_hint_skipped_for_greeting(
+    engine: ProtocolEngine, route: Route
+) -> None:
+    reply = await engine.handle_message(PATIENT_PHONE, route, "שלום")
+    # First greeting carries no nav hint.
+    assert "חזור" not in reply
+    assert "התחל מחדש" not in reply
+
+
+@pytest.mark.asyncio
+async def test_back_from_empty_history_reshows_current(
+    engine: ProtocolEngine, route: Route
+) -> None:
+    await engine.handle_message(PATIENT_PHONE, route, "שלום")  # greeting shown
+    reply = await engine.handle_message(PATIENT_PHONE, route, "99")
+    # No prior state → re-show greeting menu.
+    assert "במה אפשר לעזור" in reply
+
+
+@pytest.mark.asyncio
+async def test_back_works_inside_time_selection(
+    engine: ProtocolEngine, route: Route, repo: RedisConversationRepository
+) -> None:
+    # Walk to TS_OFFER_CLOSEST
+    for m in ["2", "כן", "1", "01/01/1990", "1", "1"]:
+        await engine.handle_message(PATIENT_PHONE, route, m)
+    # Back → TS_ASK_MODE
+    reply = await engine.handle_message(PATIENT_PHONE, route, "99")
+    state = await repo.get_protocol_state(PATIENT_PHONE, ROUTE_PHONE)
+    assert state == ProtocolState.TS_ASK_MODE
+    assert "הקרובים" in reply or "מסוים" in reply
+
+
+# ---------------------------------------------------------------------------
 # Mismatch handling — slot fetch fails (e.g. doctor/type mismatch 4xx)
 # ---------------------------------------------------------------------------
 
@@ -399,9 +574,8 @@ async def test_slot_mismatch_handled_gracefully(
     await engine.handle_message(PATIENT_PHONE, route, "1")  # kupah
     await engine.handle_message(PATIENT_PHONE, route, "01/01/1990")  # birth
     await engine.handle_message(PATIENT_PHONE, route, "1")  # visit type
-    await engine.handle_message(PATIENT_PHONE, route, "1")  # window=morning
-    # When=soonest triggers slot fetch → raises → graceful fallback
+    # Mode=closest triggers slot fetch → raises → graceful fallback to mode prompt
     reply = await engine.handle_message(PATIENT_PHONE, route, "1")
 
     assert "אינו זמין" in reply or "ננסה" in reply  # slot-gone message
-    assert "בוקר" in reply  # window prompt re-shown
+    assert "הקרובים" in reply or "מסוים" in reply  # mode prompt re-shown

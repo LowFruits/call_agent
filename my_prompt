@@ -1,49 +1,13 @@
-  Database_Simulation: timezone fix shipped (Option A, as you proposed)
+i want to make few changes to the char protocol (the fsm i guess). i will list all the things i have in mind, and then we will plan a thorough implementation ofr all the needs:
 
-  Status: deployed and live. Ship lockstep on your end at your convenience.
+1. for all questions to the client, always number then options so that the client can easily reply with a number. some questions are yes/no without numbers
+2. for ids, why does it sometimes return "not a valid id" according to what you check wether an id is valid? when i use my id it works but when i use 123456789 it doesnt..actually i like it that it validates the id, but i wonder how it knows.
+3. in every question we must allow going back to the previous question or going back to the starting point. this is to handle cases when a client accidently entered wrong details and wants to go back, or they want to redo everything
+4. i want to make the whole process as short and easy as possible. at the stage where we ask them for the dates and time lets go from macro to micro: first of all give 2 options closet slots or pick a date. if choosing closest slots then provide 2 options morning with the 3 closest times available, noon with the 3 closest times available, evening with the 3 closest times available
+if choosing a specific date: you must provide the doctor working days, once the client picks a date, you provide them with 3 available times (if exist) of that date such that the 3 slots are as spread as possible over the day hours, so we increase the chances they will pick one of these 3 options
+5. currently when trying a specific date, if the client declines a time, then it goes back to starting point of the date conversation. the behavior should be to reply with a different (availble) times.
+6. after i have declined a date+time, when i pick again the same date it suggests me the same time (that i have already declined)
 
-  What changed in the API
 
-  Per your timezone bug report — Option A is now in effect. Every datetime on the wire is tz-aware ISO with offset:
 
-  - GET /scheduling/slots returns Asia/Jerusalem:
-  "start_time": "2099-06-01T09:00:00+03:00" (or +02:00 in winter, DST-aware).
-  - POST /scheduling/appointments/book requires tz-aware start_time. Naive datetimes are now rejected with 422 (Pydantic validation error). You can send Asia/Jerusalem (most natural — same as what you got from /slots) or any
-  other tz; the backend converts to UTC internally.
-  - All appointment reads (GET /appointments/..., response of POST /book) return UTC with Z suffix:
-  "start_time": "2099-06-01T06:00:00Z".
-  This represents the same instant as the offered slot. Any date library (luxon, date-fns, dayjs, JS native) parses both representations and lets you compare instants directly.
-  - All other timestamps (created_at, updated_at, cancelled_at, plus read_at/replied_at on Messages) are also tz-aware UTC.
 
-  What you need to do
-
-  Per your own prompt's "Coordination" section — you said: "For Option A: call_agent will tag outgoing times with Asia/Jerusalem and accept tz-aware responses."
-
-  Concretely:
-
-  1. When sending POST /scheduling/appointments/book, ensure start_time is tz-aware. If you pass through the value from /scheduling/slots, it's already +03:00-tagged — works directly. If you construct from a wall-clock string
-  with implicit Jerusalem context, attach Asia/Jerusalem tzinfo before serializing.
-  2. When parsing slot or appointment responses, stop assuming naive datetimes. Whichever date library you use, parse the offset (it's always present now). Compare as instants, not wall-clock strings.
-  3. No URL changes — endpoint paths are unchanged.
-  4. No data migration on your side — pre-existing test rows in Neon were just naive UTC values; on read they now appear with Z suffix. Same instants.
-
-  Acceptance criterion (from your prompt)
-
-  ▎ Books an appointment for slot 09:00 and verifies the resulting GET /appointments/by-patient row reports the same wall-clock time
-
-  ✅ Verified locally. Slot offered as 09:00+03:00, booking stored, GET-back returns 06:00Z, and 06:00Z.astimezone(Asia/Jerusalem) == 09:00. Same instant, two representations.
-
-  Latent input bug also fixed
-
-  Aside: the previous code used request.start_time.replace(tzinfo=tz) which silently relabeled the caller's tz as Jerusalem. If you'd ever sent 09:00+00:00, it would have been mis-stored. That's now
-  request.start_time.astimezone(UTC) — honors whatever tz you send.
-
-  OpenAPI
-
-  meta/api-contracts/scheduling-api.json regenerated; reflects the live backend. Pull meta once Tomer commits there.
-
-  Out of scope (still)
-
-  - Per-appointment-type availability windows (deferred per ADR-008).
-  - Broader clinic_id removal across Doctor/Appointment/Clinic (deferred to ADR-010).
-  - time fields on AvailabilityRule / CalendarException (still naive time — they represent clinic-local hours-of-day with no date, so tz doesn't apply).

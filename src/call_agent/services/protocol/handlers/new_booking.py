@@ -116,8 +116,8 @@ async def handle_ask_visit_type(
     if visit is None:
         return ProtocolState.ASK_VISIT_TYPE, context, prompts_he.ASK_VISIT_TYPE
     context.visit_type = visit
-    # Enter the time-selection sub-FSM
-    return ProtocolState.TS_ASK_WINDOW, context, prompts_he.ASK_TIME_WINDOW
+    # Enter the time-selection sub-FSM (mode picker: closest vs specific date).
+    return ProtocolState.TS_ASK_MODE, context, prompts_he.ASK_TIME_MODE
 
 
 # ---------------------------------------------------------------------------

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 
 import redis.asyncio as aioredis
+from pydantic import ValidationError
 
 from call_agent.domain.models import Message
 from call_agent.domain.protocol import ProtocolContext, ProtocolState
+
+logger = logging.getLogger(__name__)
 
 _TTL_SECONDS = 86400  # 24 hours
 
@@ -51,7 +55,13 @@ class RedisConversationRepository:
         if raw is None:
             return ProtocolState.ASK_INTENT
         value = raw.decode("utf-8") if isinstance(raw, bytes) else raw
-        return ProtocolState(value)
+        try:
+            return ProtocolState(value)
+        except ValueError:
+            # Stored value is from an older schema (state removed/renamed).
+            # Treat as a fresh conversation — caller will overwrite on next set.
+            logger.warning("unknown protocol state %r — resetting", value)
+            return ProtocolState.ASK_INTENT
 
     async def set_protocol_state(
         self, patient_phone: str, route_phone: str, state: ProtocolState
@@ -68,7 +78,14 @@ class RedisConversationRepository:
         raw = await self._redis.get(self._ctx_key(patient_phone, route_phone))
         if raw is None:
             return ProtocolContext()
-        return ProtocolContext.model_validate_json(raw)
+        try:
+            return ProtocolContext.model_validate_json(raw)
+        except ValidationError:
+            logger.warning(
+                "stored protocol context for %s:%s failed to deserialize — resetting",
+                patient_phone, route_phone,
+            )
+            return ProtocolContext()
 
     async def set_protocol_context(
         self, patient_phone: str, route_phone: str, context: ProtocolContext

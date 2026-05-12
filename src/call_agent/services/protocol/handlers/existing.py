@@ -42,8 +42,8 @@ async def handle_ask_existing_action(
     if action == ExistingAction.CANCEL:
         return ProtocolState.CONFIRM_CANCEL, context, prompts_he.CONFIRM_CANCEL
 
-    # RESCHEDULE — enter time-selection sub-FSM
-    return ProtocolState.TS_ASK_WINDOW, context, prompts_he.ASK_TIME_WINDOW
+    # RESCHEDULE — enter time-selection sub-FSM (mode picker).
+    return ProtocolState.TS_ASK_MODE, context, prompts_he.ASK_TIME_MODE
 
 
 async def handle_more_info(
@@ -110,10 +110,12 @@ async def handle_reschedule_offer_slot(
         reply = prompts_he.SUMMARY_CONFIRM_RESCHEDULE_TEMPLATE.format(summary=summary)
         return ProtocolState.SUMMARIZE_RESCHEDULE, context, reply
     if choice == 2:
-        # Pick a different time → loop back
+        # Pick a different time → loop back to mode selection (declined memory kept).
+        if context.offered_slot_start is not None:
+            context.declined_slot_starts.append(context.offered_slot_start)
         context.offered_slot_start = None
         context.offered_slot_end = None
-        return ProtocolState.TS_ASK_WINDOW, context, prompts_he.ASK_TIME_WINDOW
+        return ProtocolState.TS_ASK_MODE, context, prompts_he.ASK_TIME_MODE
     # choice == 3 — change something else
     return (
         ProtocolState.RESCHEDULE_CHANGE_MENU,

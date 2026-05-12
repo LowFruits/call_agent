@@ -90,6 +90,35 @@ class CancelRequest(BaseModel):
     reason: str | None = None
 
 
+class AvailabilityRule(BaseModel):
+    id: UUID | None = None
+    doctor_id: UUID
+    day_of_week: str  # "monday".."sunday"
+    start_time: str  # HH:MM
+    end_time: str  # HH:MM
+    slot_duration_minutes: int = 30
+    is_active: bool = True
+    effective_from: date | None = None
+    effective_until: date | None = None
+    created_at: datetime | None = None
+
+
+class CalendarException(BaseModel):
+    id: UUID | None = None
+    doctor_id: UUID
+    date: date
+    exception_type: str  # "blocked" | "override"
+    start_time: str | None = None
+    end_time: str | None = None
+    reason: str | None = None
+
+
+class DoctorAvailability(BaseModel):
+    doctor_id: UUID
+    rules: list[AvailabilityRule]
+    exceptions: list[CalendarException]
+
+
 # ---------------------------------------------------------------------------
 # Internal models
 # ---------------------------------------------------------------------------

@@ -36,3 +36,7 @@ data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local-only session continuity files (everything else under .work/ is tracked)
+.work/parked.md
+.work/handoff.md

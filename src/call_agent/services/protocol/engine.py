@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Literal
 
 from call_agent.domain.models import Route
-from call_agent.domain.protocol import ProtocolContext, ProtocolState
+from call_agent.domain.protocol import HistoryEntry, ProtocolContext, ProtocolState
 from call_agent.repositories import ConversationRepositoryProtocol, SchedulingAPIProtocol
 from call_agent.services.protocol import prompts_he
 
@@ -16,6 +17,35 @@ HandlerFn = Callable[
     [ProtocolContext, str, str, Route, SchedulingAPIProtocol],
     Awaitable[HandlerResult],
 ]
+
+# Navigation hint appended to every prompt that's awaiting a user response.
+_NAV_HINT = "(99 = חזור, 0 = התחל מחדש)"
+
+# Tokens that mean "back" / "restart" regardless of the current state.
+_BACK_TOKENS = {"99", "חזור", "אחורה", "back"}
+_RESTART_TOKENS = {"0", "התחל מחדש", "התחלה", "restart"}
+
+# States where the hint is suppressed (terminals + the very first greeting).
+_NO_HINT_STATES = {
+    ProtocolState.ASK_INTENT,
+    ProtocolState.DONE,
+    ProtocolState.STUCK,
+}
+
+
+def _parse_nav(text: str) -> Literal["back", "restart"] | None:
+    s = text.strip().lower()
+    if s in _BACK_TOKENS:
+        return "back"
+    if s in _RESTART_TOKENS:
+        return "restart"
+    return None
+
+
+def _with_hint(state: ProtocolState, reply: str) -> str:
+    if state in _NO_HINT_STATES:
+        return reply
+    return f"{reply}\n\n{_NAV_HINT}"
 
 
 class ProtocolEngine:
@@ -37,9 +67,41 @@ class ProtocolEngine:
             patient_phone, route.phone_number
         )
 
-        next_state, next_ctx, reply = await self._dispatch(
-            state, context, text, patient_phone, route
-        )
+        nav = _parse_nav(text)
+        if nav == "restart":
+            next_state = ProtocolState.ASK_INTENT
+            next_ctx = ProtocolContext()
+            reply = prompts_he.GREETING_AND_INTENT_MENU
+        elif nav == "back":
+            if context.state_history:
+                entry = context.state_history.pop()
+                next_state = entry.state
+                next_ctx = context
+                reply = entry.prompt
+            else:
+                # Nothing to go back to — re-show the current prompt.
+                next_state = state
+                next_ctx = context
+                reply = context.last_prompt or prompts_he.GREETING_AND_INTENT_MENU
+        else:
+            next_state, next_ctx, reply = await self._dispatch(
+                state, context, text, patient_phone, route
+            )
+            # Record the state we *left* (with the prompt that was shown there)
+            # so '99' can return the user to it. Re-prompts (same state) and
+            # transitions away from STUCK don't get pushed.
+            if (
+                next_state != state
+                and state != ProtocolState.STUCK
+                and next_ctx.last_prompt is not None
+            ):
+                next_ctx.state_history.append(
+                    HistoryEntry(state=state, prompt=next_ctx.last_prompt)
+                )
+
+        # Stamp last_prompt with the raw reply (no nav hint) so back-replay is
+        # idempotent — the hint is re-applied on the next turn.
+        next_ctx.last_prompt = reply
 
         await self._repo.set_protocol_state(
             patient_phone, route.phone_number, next_state
@@ -47,7 +109,7 @@ class ProtocolEngine:
         await self._repo.set_protocol_context(
             patient_phone, route.phone_number, next_ctx
         )
-        return reply
+        return _with_hint(next_state, reply)
 
     async def _dispatch(
         self,
@@ -102,11 +164,12 @@ _HANDLERS: dict[ProtocolState, HandlerFn] = {
     ProtocolState.ASK_NAME: new_booking.handle_ask_name,
     ProtocolState.ASK_SMS_CONSENT: new_booking.handle_ask_sms_consent,
     ProtocolState.SUMMARIZE_AND_CONFIRM: new_booking.handle_summarize_and_confirm,
-    # Time-selection sub-FSM
-    ProtocolState.TS_ASK_WINDOW: time_selection.handle_ask_window,
-    ProtocolState.TS_ASK_WHEN: time_selection.handle_ask_when,
+    # Time-selection sub-FSM (mode → closest|specific → numbered offers)
+    ProtocolState.TS_ASK_MODE: time_selection.handle_ask_mode,
+    ProtocolState.TS_OFFER_CLOSEST: time_selection.handle_offer_closest,
     ProtocolState.TS_ASK_SPECIFIC_DATE: time_selection.handle_ask_specific_date,
-    ProtocolState.TS_OFFER_SLOT: time_selection.handle_offer_slot,
+    ProtocolState.TS_OFFER_DATE_SLOTS: time_selection.handle_offer_date_slots,
+    ProtocolState.NO_SLOTS_OFFER_MESSAGE: time_selection.handle_no_slots_offer_message,
     # Existing-appointment branch
     ProtocolState.ASK_EXISTING_ACTION: existing.handle_ask_existing_action,
     ProtocolState.MORE_INFO: existing.handle_more_info,

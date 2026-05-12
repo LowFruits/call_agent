@@ -7,9 +7,8 @@ from call_agent.domain.protocol import (
     Branch,
     ExistingAction,
     RescheduleChangeField,
-    TimeWindow,
     VisitType,
-    WhenPreference,
+    WhenMode,
 )
 
 
@@ -102,35 +101,18 @@ def parse_visit_type(message: str) -> VisitType | None:
     return None
 
 
-def parse_time_window(message: str) -> TimeWindow | None:
+def parse_when_mode(message: str) -> WhenMode | None:
+    """Parse the user's pick at TS_ASK_MODE: closest vs specific date."""
     choice = parse_int_choice(message, 2)
     if choice == 1:
-        return TimeWindow.MORNING
+        return WhenMode.CLOSEST
     if choice == 2:
-        return TimeWindow.AFTERNOON
+        return WhenMode.SPECIFIC_DATE
     s = message.strip()
-    if any(kw in s for kw in ("בוקר", "morning")):
-        return TimeWindow.MORNING
-    if any(kw in s for kw in ("צהריים", "ערב", "אחרי", "afternoon", "evening")):
-        return TimeWindow.AFTERNOON
-    return None
-
-
-def parse_when_preference(message: str) -> WhenPreference | None:
-    choice = parse_int_choice(message, 3)
-    if choice == 1:
-        return WhenPreference.SOONEST
-    if choice == 2:
-        return WhenPreference.THIS_WEEK
-    if choice == 3:
-        return WhenPreference.SPECIFIC_DATE
-    s = message.strip()
-    if any(kw in s for kw in ("הקרוב", "מהר", "asap", "soonest")):
-        return WhenPreference.SOONEST
-    if any(kw in s for kw in ("השבוע", "שבוע", "this week")):
-        return WhenPreference.THIS_WEEK
+    if any(kw in s for kw in ("הקרוב", "מהר", "asap", "soonest", "closest")):
+        return WhenMode.CLOSEST
     if any(kw in s for kw in ("ספציפי", "תאריך", "יום")):
-        return WhenPreference.SPECIFIC_DATE
+        return WhenMode.SPECIFIC_DATE
     return None
 
 

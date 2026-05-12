@@ -44,10 +44,12 @@ class ProtocolState(StrEnum):
     COLLECT_MESSAGE = "collect_message"
 
     # Time-selection sub-FSM (reused by new-booking and reschedule)
-    TS_ASK_WINDOW = "ts_ask_window"
-    TS_ASK_WHEN = "ts_ask_when"
+    TS_ASK_MODE = "ts_ask_mode"
+    TS_OFFER_CLOSEST = "ts_offer_closest"
     TS_ASK_SPECIFIC_DATE = "ts_ask_specific_date"
-    TS_OFFER_SLOT = "ts_offer_slot"
+    TS_OFFER_DATE_SLOTS = "ts_offer_date_slots"
+    # Fallback when no slots exist for the next 6 months — offer to leave a message.
+    NO_SLOTS_OFFER_MESSAGE = "no_slots_offer_message"
 
     # Terminal
     DONE = "done"
@@ -62,13 +64,13 @@ class VisitType(StrEnum):
 
 
 class TimeWindow(StrEnum):
-    MORNING = "morning"
-    AFTERNOON = "afternoon"
+    MORNING = "morning"   # 09:00–11:59 local
+    NOON = "noon"         # 12:00–14:59 local
+    EVENING = "evening"   # 15:00–end local
 
 
-class WhenPreference(StrEnum):
-    SOONEST = "soonest"
-    THIS_WEEK = "this_week"
+class WhenMode(StrEnum):
+    CLOSEST = "closest"
     SPECIFIC_DATE = "specific_date"
 
 
@@ -83,6 +85,14 @@ class RescheduleChangeField(StrEnum):
     KUPAT_CHOLIM = "kupat_cholim"
 
 
+class HistoryEntry(BaseModel):
+    """A single entry on the navigation stack: a prior state + the prompt the
+    user saw at that state. Popped on '99'/back."""
+
+    state: ProtocolState
+    prompt: str
+
+
 class ProtocolContext(BaseModel):
     """All data collected across a single protocol session.
 
@@ -90,6 +100,11 @@ class ProtocolContext(BaseModel):
     """
 
     branch: Branch | None = None
+
+    # Navigation support — populated by the engine on state changes.
+    state_history: list[HistoryEntry] = []
+    # Prompt last sent to the user — replayed on "back" with empty history.
+    last_prompt: str | None = None
 
     # New-booking — collected progressively
     first_visit: bool | None = None
@@ -99,12 +114,16 @@ class ProtocolContext(BaseModel):
     visit_type: VisitType | None = None
 
     # Time-selection (used by new-booking and reschedule sub-flow)
-    time_window: TimeWindow | None = None
-    when_pref: WhenPreference | None = None
+    when_mode: WhenMode | None = None
     specific_date: date | None = None
+    # Map of menu-number -> slot bounds for the current TS_OFFER_* batch.
+    offered_slots: dict[int, datetime] = {}
+    offered_slots_end: dict[int, datetime] = {}
+    # The finalised user pick, used by booking/reschedule downstream.
     offered_slot_start: datetime | None = None
     offered_slot_end: datetime | None = None
     offered_appt_type_id: UUID | None = None
+    declined_slot_starts: list[datetime] = []
 
     # Patient identity
     for_self: bool | None = None
