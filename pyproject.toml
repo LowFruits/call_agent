@@ -25,6 +25,9 @@ dev = [
     "fakeredis>=2.21",
 ]
 
+[tool.setuptools.package-data]
+call_agent = ["api/static/*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"
